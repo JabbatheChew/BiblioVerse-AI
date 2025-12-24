@@ -7,7 +7,7 @@ interface TypewriterProps {
   onComplete?: () => void;
 }
 
-const Typewriter: React.FC<TypewriterProps> = ({ text, speed = 5, onComplete }) => {
+const Typewriter: React.FC<TypewriterProps> = ({ text = "", speed = 5, onComplete }) => {
   const [displayedText, setDisplayedText] = useState('');
   const [index, setIndex] = useState(0);
 
@@ -17,9 +17,10 @@ const Typewriter: React.FC<TypewriterProps> = ({ text, speed = 5, onComplete }) 
   }, [text]);
 
   useEffect(() => {
-    if (index < text.length) {
+    const safeText = text || "";
+    if (index < safeText.length) {
       const timeout = setTimeout(() => {
-        setDisplayedText(prev => prev + text[index]);
+        setDisplayedText(prev => prev + safeText[index]);
         setIndex(prev => prev + 1);
       }, speed);
       return () => clearTimeout(timeout);

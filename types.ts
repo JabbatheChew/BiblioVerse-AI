@@ -29,7 +29,5 @@ export interface AIResponse {
   scene_image_prompt: string;
   narrator_voice_tone: string;
   book_title?: string;
-  ambient_mood?: string;
-  sfx_trigger?: string;
   npc?: NPCInteraction;
 }
