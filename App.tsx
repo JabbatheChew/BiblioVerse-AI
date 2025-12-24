@@ -1,23 +1,35 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { GameMessage, GameState, GameLocation } from './types';
+import { GameMessage, GameState, GameLocation, NPCInteraction } from './types';
 import { getGameUpdate, generateSceneImage } from './services/geminiService';
 import Typewriter from './components/Typewriter';
 
-// Ses Efektleri Tanımları
-const SFX = {
+// Genişletilmiş Ses Efektleri (Anlık SFX)
+const SFX: Record<string, string> = {
   SHATTER: 'https://cdn.pixabay.com/audio/2021/08/09/audio_8816743b18.mp3', 
   PAGE: 'https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3', 
-  MAGIC: 'https://cdn.pixabay.com/audio/2022/03/15/audio_c3c3951f28.mp3', 
+  MAGIC: 'https://cdn.pixabay.com/audio/2022/03/15/audio_c3c3951f28.mp3',
+  sword_clash: 'https://assets.mixkit.co/active_storage/sfx/2085/2085-preview.mp3',
+  magic_sparkle: 'https://assets.mixkit.co/active_storage/sfx/1118/1118-preview.mp3',
+  ship_creak: 'https://assets.mixkit.co/active_storage/sfx/1089/1089-preview.mp3',
+  futuristic_hum: 'https://assets.mixkit.co/active_storage/sfx/2558/2558-preview.mp3',
+  heavy_door: 'https://assets.mixkit.co/active_storage/sfx/1077/1077-preview.mp3',
+  rain_start: 'https://assets.mixkit.co/active_storage/sfx/2505/2505-preview.mp3',
+  thunder: 'https://cdn.pixabay.com/audio/2021/08/09/audio_417b705e4d.mp3',
+  wolf_howl: 'https://cdn.pixabay.com/audio/2022/03/15/audio_2d8b8e1f5a.mp3'
 };
 
-// Ortam Sesleri (Loops)
+// Genişletilmiş Ortam Sesleri (Loops)
 const AMBIENT_TRACKS: Record<string, string> = {
   LIBRARY: 'https://cdn.pixabay.com/audio/2022/03/24/audio_3d1a8e1b36.mp3', 
   FOREST: 'https://cdn.pixabay.com/audio/2022/01/18/audio_6038379c38.mp3', 
   DESERT: 'https://cdn.pixabay.com/audio/2021/08/09/audio_8e8267252f.mp3', 
-  SPACE: 'https://cdn.pixabay.com/audio/2022/03/15/audio_2d8b8e1f5a.mp3', 
-  MYSTIC: 'https://cdn.pixabay.com/audio/2021/11/25/audio_55e2e4b37d.mp3', 
+  SPACE: 'https://cdn.pixabay.com/audio/2022/03/15/audio_b299e56726.mp3', 
+  MYSTIC: 'https://cdn.pixabay.com/audio/2021/11/25/audio_55e2e4b37d.mp3',
+  OCEAN: 'https://cdn.pixabay.com/audio/2022/03/09/audio_0ec70c1e7f.mp3',
+  CYBERPUNK: 'https://cdn.pixabay.com/audio/2022/03/20/audio_51d45c50c5.mp3',
+  DUNGEON: 'https://cdn.pixabay.com/audio/2022/03/24/audio_73e721d003.mp3',
+  WINTER: 'https://cdn.pixabay.com/audio/2021/08/09/audio_6891eb5877.mp3'
 };
 
 const ShatterEffect: React.FC = () => {
@@ -66,14 +78,14 @@ const InventoryModal: React.FC<{
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 animate-fade-in">
       <div 
-        className="absolute inset-0 bg-black/90 backdrop-blur-md cursor-pointer" 
+        className="absolute inset-0 bg-black/95 backdrop-blur-md cursor-pointer" 
         onClick={onClose}
       ></div>
-      <div className="relative w-full max-w-md bg-stone-950 border border-white/10 rounded-lg shadow-[0_0_80px_rgba(0,0,0,1)] overflow-hidden">
+      <div className="relative w-full max-w-md bg-stone-950 border border-white/10 rounded-xl shadow-[0_0_100px_rgba(0,0,0,1)] overflow-hidden">
         <div className="px-6 py-5 border-b border-white/5 flex justify-between items-center bg-stone-900/50">
           <h2 className="font-crimson text-xl font-bold tracking-widest text-stone-100 uppercase">Kadim Heybe</h2>
-          <button onClick={onClose} className="text-stone-500 hover:text-white transition-colors p-1">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          <button onClick={onClose} className="text-stone-500 hover:text-white transition-colors p-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
           </button>
         </div>
         <div className="p-8 max-h-[50vh] overflow-y-auto no-scrollbar">
@@ -117,33 +129,43 @@ const App: React.FC = () => {
     currentImage: null,
     isProcessing: false,
     activeBookTitle: undefined,
-    currentPrompt: undefined
+    currentPrompt: undefined,
+    activeNPC: undefined
   });
   const [inputValue, setInputValue] = useState('');
   const [isShattering, setIsShattering] = useState(false);
   const [isInventoryOpen, setIsInventoryOpen] = useState(false);
   const [userInteracted, setUserInteracted] = useState(false);
+  const [typingSpeed, setTypingSpeed] = useState(15);
   
   const scrollRef = useRef<HTMLDivElement>(null);
   const prevLocationRef = useRef<GameLocation>('LIBRARY');
   const ambientAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  const playSound = (url: string, volume: number = 0.4) => {
+  const playSound = (urlOrKey: string, volume: number = 0.4) => {
+    const url = SFX[urlOrKey] || urlOrKey;
     const audio = new Audio(url);
     audio.volume = volume;
-    audio.play().catch(e => console.warn('SFX block:', e));
+    audio.play().catch(e => console.warn('Sound block:', e));
   };
 
   const updateAmbient = (mood?: string) => {
     if (!userInteracted) return;
 
     let targetTrack = AMBIENT_TRACKS.LIBRARY;
-    if (gameState.location === 'STORY_WORLD') {
-      targetTrack = AMBIENT_TRACKS.MYSTIC;
+    
+    if (gameState.location === 'STORY_WORLD' || mood) {
       const m = (mood || '').toLowerCase();
-      if (m.includes('forest')) targetTrack = AMBIENT_TRACKS.FOREST;
-      if (m.includes('desert') || m.includes('wind')) targetTrack = AMBIENT_TRACKS.DESERT;
-      if (m.includes('space')) targetTrack = AMBIENT_TRACKS.SPACE;
+      if (m.includes('whispers') || m.includes('library')) targetTrack = AMBIENT_TRACKS.LIBRARY;
+      else if (m.includes('forest')) targetTrack = AMBIENT_TRACKS.FOREST;
+      else if (m.includes('desert')) targetTrack = AMBIENT_TRACKS.DESERT;
+      else if (m.includes('space')) targetTrack = AMBIENT_TRACKS.SPACE;
+      else if (m.includes('mystic')) targetTrack = AMBIENT_TRACKS.MYSTIC;
+      else if (m.includes('ocean') || m.includes('waves')) targetTrack = AMBIENT_TRACKS.OCEAN;
+      else if (m.includes('cyberpunk') || m.includes('city')) targetTrack = AMBIENT_TRACKS.CYBERPUNK;
+      else if (m.includes('dungeon') || m.includes('ancient')) targetTrack = AMBIENT_TRACKS.DUNGEON;
+      else if (m.includes('winter') || m.includes('blizzard')) targetTrack = AMBIENT_TRACKS.WINTER;
+      else targetTrack = AMBIENT_TRACKS.MYSTIC;
     }
 
     if (ambientAudioRef.current?.src === targetTrack) return;
@@ -194,8 +216,10 @@ const App: React.FC = () => {
           currentImage: img,
           isProcessing: false,
           activeBookTitle: res.book_title,
-          currentPrompt: res.scene_image_prompt
+          currentPrompt: res.scene_image_prompt,
+          activeNPC: res.npc
         });
+        if (res.ambient_mood) updateAmbient(res.ambient_mood);
       } catch (err) {
         setGameState(prev => ({ ...prev, isProcessing: false }));
       }
@@ -224,7 +248,7 @@ const App: React.FC = () => {
   useEffect(() => {
     if (prevLocationRef.current === 'LIBRARY' && gameState.location === 'STORY_WORLD') {
       setIsShattering(true);
-      playSound(SFX.SHATTER, 0.8);
+      playSound('SHATTER', 0.8);
       setTimeout(() => setIsShattering(false), 2000);
     }
     prevLocationRef.current = gameState.location;
@@ -254,8 +278,10 @@ const App: React.FC = () => {
         console.error("Image generation failed for step", e);
       }
       
-      if (img) playSound(SFX.MAGIC, 0.3);
-      playSound(SFX.PAGE, 0.2);
+      if (img) playSound('MAGIC', 0.3);
+      if (res.sfx_trigger) playSound(res.sfx_trigger, 0.5);
+      else playSound('PAGE', 0.2);
+      
       if (res.ambient_mood) updateAmbient(res.ambient_mood);
 
       setMessages(prev => [...prev, { role: 'narrator', content: res.text, timestamp: Date.now() }]);
@@ -266,6 +292,7 @@ const App: React.FC = () => {
         currentImage: img || prev.currentImage,
         activeBookTitle: res.book_title,
         currentPrompt: res.scene_image_prompt,
+        activeNPC: res.npc,
         isProcessing: false
       }));
     } catch (err) {
@@ -283,7 +310,7 @@ const App: React.FC = () => {
 
   const handleReturnToLibrary = () => {
     setIsShattering(true);
-    playSound(SFX.SHATTER, 0.6);
+    playSound('SHATTER', 0.6);
     processCommand("Kütüphaneye geri dönmek istiyorum.");
     setTimeout(() => setIsShattering(false), 2000);
   };
@@ -304,7 +331,7 @@ const App: React.FC = () => {
         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/black-paper.png')]"></div>
       </div>
 
-      <header className="z-20 border-b border-white/5 bg-black/70 backdrop-blur-2xl px-5 py-4 flex justify-between items-center flex-shrink-0">
+      <header className="z-20 border-b border-white/5 bg-black/80 backdrop-blur-2xl px-6 py-4 flex justify-between items-center flex-shrink-0">
         <div className="flex items-center gap-5">
           <div className={`w-3 h-3 rounded-full transition-all duration-1000 ${gameState.location === 'STORY_WORLD' ? 'bg-purple-500 shadow-[0_0_20px_rgba(168,85,247,0.8)]' : 'bg-amber-600 shadow-[0_0_20px_rgba(217,119,6,0.8)]'}`}></div>
           <div>
@@ -316,28 +343,48 @@ const App: React.FC = () => {
                 <button 
                   onClick={handleReturnToLibrary}
                   disabled={gameState.isProcessing}
-                  className="bg-stone-800/40 hover:bg-stone-700/60 border border-white/10 text-[9px] uppercase tracking-[0.2em] px-3 py-1 rounded-sm text-stone-400 hover:text-white transition-all flex items-center gap-2 group disabled:opacity-30"
+                  className="bg-stone-800/40 hover:bg-stone-700/60 border border-white/10 text-[10px] uppercase tracking-[0.2em] px-4 py-1.5 rounded text-stone-400 hover:text-white transition-all flex items-center gap-2 group disabled:opacity-30"
                 >
                   <span className="opacity-40 group-hover:opacity-100 transition-opacity">ESC</span>
                   <span>Kütüphaneye Dön</span>
                 </button>
               )}
             </div>
-            <p className="text-[9px] text-stone-600 uppercase tracking-[0.4em] font-semibold -mt-0.5">Infinite Story Engine</p>
+            <p className="text-[9px] text-stone-600 uppercase tracking-[0.5em] font-semibold -mt-0.5">Infinite Story Engine</p>
           </div>
         </div>
-        <div className="flex gap-4 items-center">
+        
+        <div className="flex gap-6 items-center">
+          <div className="flex items-center gap-3 bg-stone-900/40 px-4 py-2 rounded-lg border border-white/5">
+             <span className="text-[9px] uppercase tracking-widest text-stone-500 font-bold">Hız</span>
+             <div className="flex gap-1">
+                {[
+                  { label: 'Ağır', val: 40 },
+                  { label: 'Normal', val: 15 },
+                  { label: 'Hızlı', val: 5 }
+                ].map((s) => (
+                  <button
+                    key={s.label}
+                    onClick={() => setTypingSpeed(s.val)}
+                    className={`text-[9px] uppercase px-2 py-0.5 rounded transition-all font-elite ${typingSpeed === s.val ? 'bg-purple-900/50 text-purple-300 border border-purple-500/30' : 'text-stone-600 hover:text-stone-400'}`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+             </div>
+          </div>
+
           <button 
             onClick={() => {
               setIsInventoryOpen(true);
-              playSound(SFX.PAGE, 0.4);
+              playSound('PAGE', 0.4);
             }}
-            className="flex items-center gap-3 bg-stone-900/60 hover:bg-stone-800 border border-white/10 hover:border-purple-500/40 px-5 py-2.5 rounded-lg transition-all group shadow-lg"
+            className="flex items-center gap-3 bg-stone-900/60 hover:bg-stone-800 border border-white/10 hover:border-purple-500/40 px-6 py-2.5 rounded-lg transition-all group shadow-lg"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-stone-500 group-hover:text-purple-400 transition-colors"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
-            <span className="text-[11px] uppercase text-stone-400 group-hover:text-stone-100 font-bold tracking-widest">Envanter</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-stone-500 group-hover:text-purple-400 transition-colors"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
+            <span className="text-[12px] uppercase text-stone-400 group-hover:text-stone-100 font-bold tracking-widest">Envanter</span>
             {gameState.inventory.length > 0 && (
-              <span className="w-4 h-4 rounded-full bg-purple-600 text-white text-[9px] flex items-center justify-center font-bold animate-pulse">
+              <span className="w-5 h-5 rounded-full bg-purple-600 text-white text-[10px] flex items-center justify-center font-bold animate-pulse shadow-[0_0_10px_rgba(168,85,247,0.5)]">
                 {gameState.inventory.length}
               </span>
             )}
@@ -346,11 +393,10 @@ const App: React.FC = () => {
       </header>
 
       <main className="flex-1 flex flex-col lg:flex-row overflow-hidden relative z-10">
-        {/* Enlarge Visual Panel to 70% width on large screens */}
-        <section className="w-full lg:w-[70%] h-[50vh] lg:h-full bg-black relative flex items-center justify-center overflow-hidden border-b lg:border-b-0 border-white/5 shadow-2xl">
+        <section className="w-full lg:w-[75%] h-[55vh] lg:h-full bg-black relative flex items-center justify-center overflow-hidden">
           {gameState.currentImage && (
             <div 
-              className="absolute inset-0 bg-cover bg-center opacity-50 blur-3xl scale-125"
+              className="absolute inset-0 bg-cover bg-center opacity-40 blur-3xl scale-125 transition-all duration-1000"
               style={{ backgroundImage: `url(${gameState.currentImage})` }}
             ></div>
           )}
@@ -360,88 +406,108 @@ const App: React.FC = () => {
               <img 
                 src={gameState.currentImage} 
                 alt="Scene" 
-                className="w-full h-full object-cover animate-fade-in transition-all duration-1000 brightness-[0.8] group-hover:brightness-100" 
+                className="w-full h-full object-cover animate-fade-in transition-all duration-1000 brightness-[0.8] group-hover:brightness-100 object-center" 
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 pointer-events-none"></div>
+              <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-70 pointer-events-none"></div>
+              <div className="absolute inset-0 shadow-[inset_0_0_200px_rgba(0,0,0,0.9)] pointer-events-none"></div>
               
-              {/* Subtle Prompt Tooltip */}
               {gameState.currentPrompt && (
-                <div className="absolute bottom-8 left-8 right-8 bg-black/80 backdrop-blur-xl p-5 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-500 text-[11px] font-mono text-stone-200 border border-white/10 pointer-events-none transform translate-y-4 group-hover:translate-y-0 shadow-[0_0_50px_rgba(0,0,0,0.9)] max-w-lg">
+                <div className="absolute bottom-10 left-10 right-10 bg-black/80 backdrop-blur-3xl p-6 rounded-2xl opacity-0 group-hover:opacity-100 transition-all duration-700 text-[11px] font-mono text-stone-200 border border-white/10 pointer-events-none transform translate-y-8 group-hover:translate-y-0 shadow-[0_0_100px_rgba(0,0,0,1)] max-w-3xl">
                   <div className="flex items-center gap-3 mb-2">
-                    <div className="w-2 h-2 rounded-full bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.8)]"></div>
-                    <span className="text-purple-400 font-bold uppercase tracking-[0.2em]">Kadim Tezahür</span>
+                    <div className="w-2.5 h-2.5 rounded-full bg-purple-500 shadow-[0_0_20px_rgba(168,85,247,0.9)]"></div>
+                    <span className="text-purple-400 font-bold uppercase tracking-[0.4em]">Kadim Tezahür</span>
                   </div>
-                  <p className="leading-relaxed text-stone-300 italic">{gameState.currentPrompt}</p>
+                  <p className="leading-relaxed text-stone-300 italic tracking-wider font-medium opacity-90">{gameState.currentPrompt}</p>
                 </div>
               )}
             </div>
           ) : (
-            <div className="flex flex-col items-center gap-5 text-stone-800 z-10">
-              <div className="w-12 h-12 border-b-2 border-stone-800 rounded-full animate-spin"></div>
-              <p className="font-elite text-xs tracking-[0.4em] uppercase text-stone-700 animate-pulse">Gerçeklik Dokunuyor...</p>
+            <div className="flex flex-col items-center gap-6 text-stone-800 z-10 animate-pulse">
+              <div className="w-16 h-16 border-b-2 border-purple-500/60 rounded-full animate-spin"></div>
+              <p className="font-elite text-sm tracking-[0.6em] uppercase text-stone-700">Gerçeklik Dokunuyor...</p>
             </div>
           )}
         </section>
 
-        {/* Story Text Panel - 30% width on large screens */}
-        <section className="w-full lg:w-[30%] flex flex-col bg-stone-900/5 backdrop-blur-md lg:border-l border-white/10 h-[50vh] lg:h-full relative overflow-hidden">
+        <section className="w-full lg:w-[25%] flex flex-col bg-[#080707] lg:border-l border-white/5 h-[45vh] lg:h-full relative overflow-hidden shadow-[-20px_0_50px_rgba(0,0,0,1)]">
+          {/* Active NPC Indicator */}
+          {gameState.activeNPC && (
+            <div className="px-6 py-4 bg-purple-900/20 border-b border-purple-500/20 animate-fade-in flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-2 h-2 rounded-full bg-purple-400 animate-pulse"></div>
+                <div className="flex flex-col">
+                  <span className="text-[10px] uppercase tracking-widest text-purple-300 font-bold">{gameState.activeNPC.name}</span>
+                  <span className="text-[8px] uppercase tracking-widest text-stone-500 italic">{gameState.activeNPC.expression}</span>
+                </div>
+              </div>
+              <div className="text-[8px] uppercase tracking-[0.2em] text-purple-500/60 font-mono text-right max-w-[100px]">
+                {gameState.activeNPC.intent}
+              </div>
+            </div>
+          )}
+
           {!userInteracted && (
-            <div className="absolute inset-0 z-20 bg-black/90 backdrop-blur-xl flex flex-col items-center justify-center p-10 pointer-events-none text-center">
-              <div className="w-px h-24 bg-gradient-to-b from-transparent via-purple-500/50 to-transparent mb-10"></div>
-              <p className="font-crimson text-white text-2xl tracking-[0.4em] uppercase animate-pulse mb-3 antialiased">
+            <div className="absolute inset-0 z-20 bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center p-12 pointer-events-none text-center">
+              <div className="w-px h-32 bg-gradient-to-b from-transparent via-purple-500/50 to-transparent mb-12"></div>
+              <p className="font-crimson text-white text-3xl tracking-[0.5em] uppercase animate-pulse mb-4 antialiased">
                 Omni-Library
               </p>
-              <p className="text-stone-600 text-[10px] uppercase tracking-[0.5em] font-light">Kaderini fısılda ve uyan...</p>
+              <p className="text-stone-600 text-[11px] uppercase tracking-[0.6em] font-light">Kaderini fısılda ve uyan...</p>
             </div>
           )}
           
-          <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 lg:p-8 space-y-10 scroll-smooth no-scrollbar">
+          <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 lg:p-8 lg:pt-10 space-y-10 scroll-smooth no-scrollbar">
             {messages.map((msg, i) => (
-              <div key={i} className={`fade-in ${msg.role === 'user' ? 'text-stone-400 italic' : 'text-white'}`}>
+              <div key={i} className={`fade-in transition-all duration-500 ${msg.role === 'user' ? 'text-stone-400 italic' : 'text-white'}`}>
                 {msg.role === 'user' ? (
                   <div className="flex gap-4 items-start justify-end group">
-                    <p className="text-[11px] md:text-xs font-inter bg-stone-900/90 px-4 py-3 rounded-xl border border-white/5 shadow-xl max-w-[90%] text-stone-400">{msg.content}</p>
+                    <div className="max-w-[95%]">
+                      <p className="text-[11px] font-inter bg-stone-900/90 px-4 py-3 rounded-xl border border-white/5 shadow-2xl text-stone-400 leading-relaxed">{msg.content}</p>
+                    </div>
                   </div>
                 ) : (
-                  <div className="pl-6 border-l-[1px] border-purple-500/20 relative">
-                    <div className="font-crimson text-base md:text-lg lg:text-xl leading-[1.7] text-white antialiased tracking-wide font-normal">
-                      <Typewriter text={msg.content} speed={15} />
+                  <div className="pl-6 border-l-2 border-purple-500/20 relative group">
+                    <div className="absolute -left-0.5 top-0 w-0.5 h-16 bg-gradient-to-b from-purple-500 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    <div className="font-crimson text-base md:text-lg lg:text-xl leading-[1.8] text-white antialiased tracking-wide font-normal">
+                      <Typewriter text={msg.content} speed={typingSpeed} />
                     </div>
                   </div>
                 )}
               </div>
             ))}
             {gameState.isProcessing && (
-              <div className="flex items-center gap-4 pl-6 animate-pulse">
-                <div className="flex gap-1.5">
-                  <div className="w-1 h-1 bg-purple-500 rounded-full animate-bounce"></div>
-                  <div className="w-1 h-1 bg-purple-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                  <div className="w-1 h-1 bg-purple-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+              <div className="flex items-center gap-5 pl-6 animate-pulse">
+                <div className="flex gap-2">
+                  <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce"></div>
+                  <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                  <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
                 </div>
-                <span className="text-stone-700 font-elite text-[9px] uppercase tracking-[0.3em] font-bold">Dokuma Sürüyor...</span>
+                <span className="text-stone-700 font-elite text-[10px] uppercase tracking-[0.4em] font-bold">Kader Örülüyor...</span>
               </div>
             )}
           </div>
 
-          {/* Input Area */}
-          <div className="p-4 lg:p-6 bg-black/80 border-t border-white/10 backdrop-blur-3xl relative z-30">
+          <div className="p-6 lg:p-8 bg-black/95 border-t border-white/5 backdrop-blur-3xl relative z-30">
             <form onSubmit={handleCommand} className="relative group w-full mx-auto">
               <input
                 type="text" 
                 value={inputValue} 
                 onChange={(e) => setInputValue(e.target.value)}
                 disabled={gameState.isProcessing}
-                placeholder={gameState.isProcessing ? "Yollar çiziliyor..." : "Kaderini fısılda..."}
-                className="w-full bg-stone-900/60 border border-stone-800 text-white px-6 py-4 rounded-xl outline-none focus:border-purple-500/50 transition-all font-inter placeholder:text-stone-800 text-xs md:text-sm shadow-2xl disabled:opacity-30"
+                placeholder={gameState.isProcessing ? "Gerçeklik bükülüyor..." : (gameState.activeNPC ? `${gameState.activeNPC.name} ile konuş...` : "Kaderini fısılda...")}
+                className="w-full bg-stone-900/60 border border-stone-800 text-stone-100 px-6 py-4 rounded-xl outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/10 transition-all font-inter placeholder:text-stone-800 text-sm shadow-2xl disabled:opacity-30"
               />
               <button 
                 type="submit" 
                 disabled={gameState.isProcessing || !inputValue.trim()}
-                className={`absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-lg flex items-center justify-center transition-all ${gameState.isProcessing || !inputValue.trim() ? 'bg-stone-950 text-stone-800 opacity-20' : 'bg-stone-800 hover:bg-purple-900 text-white shadow-xl active:scale-90'}`}
+                className={`absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-xl flex items-center justify-center transition-all ${gameState.isProcessing || !inputValue.trim() ? 'bg-stone-950 text-stone-800 opacity-20' : 'bg-stone-800 hover:bg-purple-800 text-white shadow-xl active:scale-90 hover:shadow-purple-500/20'}`}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m12 19 7-7-7-7"/><path d="M19 12H5"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m12 19 7-7-7-7"/><path d="M19 12H5"/></svg>
               </button>
             </form>
+            <div className="mt-4 text-center">
+              <p className="text-[9px] uppercase tracking-[0.6em] text-stone-700 font-bold opacity-40">Maceranı burada fısılda</p>
+            </div>
           </div>
         </section>
       </main>

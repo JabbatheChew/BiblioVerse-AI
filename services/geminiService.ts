@@ -31,7 +31,17 @@ export async function getGameUpdate(history: GameMessage[]): Promise<AIResponse>
           inventory: { type: Type.ARRAY, items: { type: Type.STRING } },
           scene_image_prompt: { type: Type.STRING },
           narrator_voice_tone: { type: Type.STRING },
-          ambient_mood: { type: Type.STRING }
+          ambient_mood: { type: Type.STRING },
+          sfx_trigger: { type: Type.STRING },
+          npc: {
+            type: Type.OBJECT,
+            properties: {
+              name: { type: Type.STRING },
+              expression: { type: Type.STRING },
+              intent: { type: Type.STRING }
+            },
+            required: ['name', 'expression', 'intent']
+          }
         },
         required: ['text', 'location', 'inventory', 'scene_image_prompt']
       }
@@ -39,7 +49,8 @@ export async function getGameUpdate(history: GameMessage[]): Promise<AIResponse>
   });
 
   try {
-    return JSON.parse(response.text || "{}") as AIResponse;
+    const text = response.text || "{}";
+    return JSON.parse(text) as AIResponse;
   } catch (e) {
     console.error("JSON parse error", e);
     throw new Error("AI responded with invalid format.");

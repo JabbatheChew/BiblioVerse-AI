@@ -7,12 +7,19 @@ export interface GameMessage {
   timestamp: number;
 }
 
+export interface NPCInteraction {
+  name: string;
+  expression: string; // e.g., "Gülümseyen", "Kızgın", "Endişeli"
+  intent: string; // e.g., "Sana bir görev vermek istiyor", "Seni uyarıyor"
+}
+
 export interface GameState {
   location: GameLocation;
   inventory: string[];
   currentImage: string | null;
   isProcessing: boolean;
   activeBookTitle?: string;
+  activeNPC?: NPCInteraction;
 }
 
 export interface AIResponse {
@@ -23,4 +30,6 @@ export interface AIResponse {
   narrator_voice_tone: string;
   book_title?: string;
   ambient_mood?: string;
+  sfx_trigger?: string;
+  npc?: NPCInteraction;
 }
