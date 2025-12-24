@@ -122,6 +122,7 @@ const InventoryModal: React.FC<{
 };
 
 const App: React.FC = () => {
+  const [isStarted, setIsStarted] = useState(false);
   const [messages, setMessages] = useState<GameMessage[]>([]);
   const [gameState, setGameState] = useState<GameState & { currentPrompt?: string }>({
     location: 'LIBRARY',
@@ -150,7 +151,7 @@ const App: React.FC = () => {
   };
 
   const updateAmbient = (mood?: string) => {
-    if (!userInteracted) return;
+    if (!userInteracted || !isStarted) return;
 
     let targetTrack = AMBIENT_TRACKS.LIBRARY;
     
@@ -197,35 +198,34 @@ const App: React.FC = () => {
     }).catch(e => console.warn("Ambient block:", e));
   };
 
-  useEffect(() => {
-    const init = async () => {
-      setGameState(prev => ({ ...prev, isProcessing: true }));
+  const initGame = async () => {
+    setIsStarted(true);
+    setUserInteracted(true);
+    setGameState(prev => ({ ...prev, isProcessing: true }));
+    try {
+      const res = await getGameUpdate([]);
+      let img = null;
       try {
-        const res = await getGameUpdate([]);
-        let img = null;
-        try {
-          img = await generateSceneImage(res.scene_image_prompt);
-        } catch (e) {
-          console.error("Initial image generation failed", e);
-        }
-        
-        setMessages([{ role: 'narrator', content: res.text, timestamp: Date.now() }]);
-        setGameState({
-          location: res.location,
-          inventory: res.inventory,
-          currentImage: img,
-          isProcessing: false,
-          activeBookTitle: res.book_title,
-          currentPrompt: res.scene_image_prompt,
-          activeNPC: res.npc
-        });
-        if (res.ambient_mood) updateAmbient(res.ambient_mood);
-      } catch (err) {
-        setGameState(prev => ({ ...prev, isProcessing: false }));
+        img = await generateSceneImage(res.scene_image_prompt);
+      } catch (e) {
+        console.error("Initial image generation failed", e);
       }
-    };
-    init();
-  }, []);
+      
+      setMessages([{ role: 'narrator', content: res.text, timestamp: Date.now() }]);
+      setGameState({
+        location: res.location,
+        inventory: res.inventory,
+        currentImage: img,
+        isProcessing: false,
+        activeBookTitle: res.book_title,
+        currentPrompt: res.scene_image_prompt,
+        activeNPC: res.npc
+      });
+      if (res.ambient_mood) updateAmbient(res.ambient_mood);
+    } catch (err) {
+      setGameState(prev => ({ ...prev, isProcessing: false }));
+    }
+  };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -242,8 +242,8 @@ const App: React.FC = () => {
   }, [gameState.location, gameState.isProcessing, isInventoryOpen]);
 
   useEffect(() => {
-    if (userInteracted) updateAmbient();
-  }, [gameState.location, userInteracted]);
+    if (userInteracted && isStarted) updateAmbient();
+  }, [gameState.location, userInteracted, isStarted]);
 
   useEffect(() => {
     if (prevLocationRef.current === 'LIBRARY' && gameState.location === 'STORY_WORLD') {
@@ -315,6 +315,64 @@ const App: React.FC = () => {
     setTimeout(() => setIsShattering(false), 2000);
   };
 
+  if (!isStarted) {
+    return (
+      <div className="h-screen bg-black flex flex-col items-center justify-center relative overflow-hidden">
+        {/* Splash Background Effects */}
+        <div className="absolute inset-0 z-0">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(168,85,247,0.1),transparent_70%)] animate-pulse"></div>
+          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/black-paper.png')] opacity-30"></div>
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-purple-900/5 blur-[120px] rounded-full"></div>
+        </div>
+
+        <div className="z-10 text-center space-y-12 max-w-2xl px-8">
+          <div className="space-y-4">
+            <p className="text-purple-500 font-elite text-xs tracking-[0.8em] uppercase animate-fade-in opacity-80">Infinite Story Engine</p>
+            <h1 className="font-crimson text-6xl md:text-8xl text-stone-100 font-bold tracking-tighter animate-fade-in [animation-delay:200ms] leading-none">
+              OMNI-LIBRARY
+            </h1>
+            <div className="w-24 h-0.5 bg-gradient-to-r from-transparent via-purple-500/50 to-transparent mx-auto mt-6"></div>
+          </div>
+          
+          <p className="font-crimson text-stone-400 text-lg md:text-xl leading-relaxed italic animate-fade-in [animation-delay:400ms]">
+            Sonsuz kütüphanenin fısıltıları seni bekliyor. <br className="hidden md:block"/> Kitapların arasındaki gizli geçitleri keşfetmeye hazır mısın?
+          </p>
+
+          <button 
+            onClick={initGame}
+            className="group relative px-12 py-5 bg-transparent border border-purple-500/30 hover:border-purple-400 rounded-full transition-all duration-500 animate-fade-in [animation-delay:600ms] overflow-hidden"
+          >
+            <div className="absolute inset-0 bg-purple-600/10 group-hover:bg-purple-600/20 transition-all duration-500 scale-x-0 group-hover:scale-x-100 origin-left"></div>
+            <span className="relative z-10 text-stone-200 font-inter text-sm font-bold tracking-[0.4em] uppercase group-hover:text-white transition-colors">
+              Maceraya Başla
+            </span>
+            <div className="absolute -inset-px border border-purple-500/50 opacity-0 group-hover:opacity-100 group-hover:blur-md transition-all duration-700 rounded-full"></div>
+          </button>
+
+          <div className="pt-12 animate-fade-in [animation-delay:1s] opacity-30">
+            <p className="text-[10px] text-stone-600 uppercase tracking-[0.5em] font-bold">Karanlıktan Gelen Bir Fısıltı...</p>
+          </div>
+        </div>
+
+        {/* Floating particles simplified */}
+        <div className="absolute inset-0 pointer-events-none opacity-20">
+          {[...Array(20)].map((_, i) => (
+            <div 
+              key={i}
+              className="absolute w-1 h-1 bg-purple-400 rounded-full animate-pulse"
+              style={{
+                top: `${Math.random() * 100}%`,
+                left: `${Math.random() * 100}%`,
+                animationDelay: `${Math.random() * 5}s`,
+                animationDuration: `${3 + Math.random() * 4}s`
+              }}
+            ></div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`h-screen flex flex-col font-inter transition-all duration-1000 overflow-hidden ${gameState.location === 'STORY_WORLD' ? 'bg-[#09050d]' : 'bg-[#0c0a09]'}`}>
       {isShattering && <ShatterEffect />}
@@ -384,7 +442,7 @@ const App: React.FC = () => {
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-stone-500 group-hover:text-purple-400 transition-colors"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
             <span className="text-[12px] uppercase text-stone-400 group-hover:text-stone-100 font-bold tracking-widest">Envanter</span>
             {gameState.inventory.length > 0 && (
-              <span className="w-5 h-5 rounded-full bg-purple-600 text-white text-[10px] flex items-center justify-center font-bold animate-pulse shadow-[0_0_10px_rgba(168,85,247,0.5)]">
+              <span className="w-5 h-5 rounded-full bg-purple-600 text-white text-[10px] flex items-center justify-center font-bold animate-pulse shadow-[0_0_100px_rgba(168,85,247,0.5)]">
                 {gameState.inventory.length}
               </span>
             )}
@@ -393,7 +451,8 @@ const App: React.FC = () => {
       </header>
 
       <main className="flex-1 flex flex-col lg:flex-row overflow-hidden relative z-10">
-        <section className="w-full lg:w-[75%] h-[55vh] lg:h-full bg-black relative flex items-center justify-center overflow-hidden">
+        {/* Visual Panel - %60 Genişlik */}
+        <section className="w-full lg:w-[60%] h-[40vh] lg:h-full bg-black relative flex items-center justify-center overflow-hidden">
           {gameState.currentImage && (
             <div 
               className="absolute inset-0 bg-cover bg-center opacity-40 blur-3xl scale-125 transition-all duration-1000"
@@ -429,46 +488,39 @@ const App: React.FC = () => {
           )}
         </section>
 
-        <section className="w-full lg:w-[25%] flex flex-col bg-[#080707] lg:border-l border-white/5 h-[45vh] lg:h-full relative overflow-hidden shadow-[-20px_0_50px_rgba(0,0,0,1)]">
+        {/* Story Text Panel - %40 Genişlik */}
+        <section className="w-full lg:w-[40%] flex flex-col bg-[#080707] lg:border-l border-white/5 h-[60vh] lg:h-full relative overflow-hidden shadow-[-20px_0_50px_rgba(0,0,0,1)]">
           {/* Active NPC Indicator */}
           {gameState.activeNPC && (
-            <div className="px-6 py-4 bg-purple-900/20 border-b border-purple-500/20 animate-fade-in flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-purple-400 animate-pulse"></div>
+            <div className="px-8 py-4 bg-purple-900/20 border-b border-purple-500/20 animate-fade-in flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-2.5 h-2.5 rounded-full bg-purple-400 animate-pulse shadow-[0_0_10px_rgba(168,85,247,0.5)]"></div>
                 <div className="flex flex-col">
-                  <span className="text-[10px] uppercase tracking-widest text-purple-300 font-bold">{gameState.activeNPC.name}</span>
-                  <span className="text-[8px] uppercase tracking-widest text-stone-500 italic">{gameState.activeNPC.expression}</span>
+                  <span className="text-[11px] uppercase tracking-widest text-purple-300 font-bold">{gameState.activeNPC.name}</span>
+                  <span className="text-[9px] uppercase tracking-widest text-stone-500 italic">{gameState.activeNPC.expression}</span>
                 </div>
               </div>
-              <div className="text-[8px] uppercase tracking-[0.2em] text-purple-500/60 font-mono text-right max-w-[100px]">
+              <div className="text-[9px] uppercase tracking-[0.2em] text-purple-500/60 font-mono text-right max-w-[150px] leading-tight">
                 {gameState.activeNPC.intent}
               </div>
             </div>
           )}
 
-          {!userInteracted && (
-            <div className="absolute inset-0 z-20 bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center p-12 pointer-events-none text-center">
-              <div className="w-px h-32 bg-gradient-to-b from-transparent via-purple-500/50 to-transparent mb-12"></div>
-              <p className="font-crimson text-white text-3xl tracking-[0.5em] uppercase animate-pulse mb-4 antialiased">
-                Omni-Library
-              </p>
-              <p className="text-stone-600 text-[11px] uppercase tracking-[0.6em] font-light">Kaderini fısılda ve uyan...</p>
-            </div>
-          )}
-          
-          <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 lg:p-8 lg:pt-10 space-y-10 scroll-smooth no-scrollbar">
+          <div ref={scrollRef} className="flex-1 overflow-y-auto p-8 lg:p-12 lg:pt-14 space-y-12 scroll-smooth no-scrollbar">
             {messages.map((msg, i) => (
-              <div key={i} className={`fade-in transition-all duration-500 ${msg.role === 'user' ? 'text-stone-400 italic' : 'text-white'}`}>
+              <div key={i} className={`fade-in transition-all duration-500 ${msg.role === 'user' ? 'text-stone-400' : 'text-white'}`}>
                 {msg.role === 'user' ? (
                   <div className="flex gap-4 items-start justify-end group">
-                    <div className="max-w-[95%]">
-                      <p className="text-[11px] font-inter bg-stone-900/90 px-4 py-3 rounded-xl border border-white/5 shadow-2xl text-stone-400 leading-relaxed">{msg.content}</p>
+                    <div className="max-w-[85%]">
+                      <p className="text-xs font-inter bg-stone-900/80 px-5 py-4 rounded-2xl border border-white/5 shadow-2xl text-stone-400 leading-relaxed italic">
+                        "{msg.content}"
+                      </p>
                     </div>
                   </div>
                 ) : (
-                  <div className="pl-6 border-l-2 border-purple-500/20 relative group">
-                    <div className="absolute -left-0.5 top-0 w-0.5 h-16 bg-gradient-to-b from-purple-500 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                    <div className="font-crimson text-base md:text-lg lg:text-xl leading-[1.8] text-white antialiased tracking-wide font-normal">
+                  <div className="pl-8 border-l-2 border-purple-500/20 relative group">
+                    <div className="absolute -left-0.5 top-0 w-0.5 h-20 bg-gradient-to-b from-purple-500 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    <div className="font-crimson text-lg md:text-xl lg:text-[22px] leading-[1.8] text-white antialiased tracking-wide font-normal">
                       <Typewriter text={msg.content} speed={typingSpeed} />
                     </div>
                   </div>
@@ -476,37 +528,50 @@ const App: React.FC = () => {
               </div>
             ))}
             {gameState.isProcessing && (
-              <div className="flex items-center gap-5 pl-6 animate-pulse">
+              <div className="flex items-center gap-6 pl-8 animate-pulse">
                 <div className="flex gap-2">
-                  <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                  <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                  <div className="w-2.5 h-2.5 bg-purple-500 rounded-full animate-bounce"></div>
+                  <div className="w-2.5 h-2.5 bg-purple-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                  <div className="w-2.5 h-2.5 bg-purple-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
                 </div>
-                <span className="text-stone-700 font-elite text-[10px] uppercase tracking-[0.4em] font-bold">Kader Örülüyor...</span>
+                <span className="text-stone-700 font-elite text-[11px] uppercase tracking-[0.5em] font-bold">Kader Örülüyor...</span>
               </div>
             )}
           </div>
 
-          <div className="p-6 lg:p-8 bg-black/95 border-t border-white/5 backdrop-blur-3xl relative z-30">
+          {/* Dinamik Textarea Giriş Alanı */}
+          <div className="p-8 lg:p-10 bg-black/95 border-t border-white/5 backdrop-blur-3xl relative z-30">
             <form onSubmit={handleCommand} className="relative group w-full mx-auto">
-              <input
-                type="text" 
+              <textarea
+                rows={1}
                 value={inputValue} 
-                onChange={(e) => setInputValue(e.target.value)}
+                onChange={(e) => {
+                  setInputValue(e.target.value);
+                  // Otomatik yükseklik ayarı
+                  e.target.style.height = 'inherit';
+                  e.target.style.height = `${e.target.scrollHeight}px`;
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleCommand(e as any);
+                    e.currentTarget.style.height = 'inherit';
+                  }
+                }}
                 disabled={gameState.isProcessing}
-                placeholder={gameState.isProcessing ? "Gerçeklik bükülüyor..." : (gameState.activeNPC ? `${gameState.activeNPC.name} ile konuş...` : "Kaderini fısılda...")}
-                className="w-full bg-stone-900/60 border border-stone-800 text-stone-100 px-6 py-4 rounded-xl outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/10 transition-all font-inter placeholder:text-stone-800 text-sm shadow-2xl disabled:opacity-30"
+                placeholder={gameState.isProcessing ? "Gerçeklik bükülüyor..." : (gameState.activeNPC ? `${gameState.activeNPC.name} ile konuş...` : "Kaderini buraya fısılda...")}
+                className="w-full bg-stone-900/50 border border-stone-800/80 text-stone-100 px-6 py-5 pr-14 rounded-2xl outline-none focus:border-purple-500/40 focus:ring-1 focus:ring-purple-500/5 transition-all font-inter placeholder:text-stone-800 text-sm shadow-inner disabled:opacity-30 resize-none max-h-40 overflow-y-auto no-scrollbar"
               />
               <button 
                 type="submit" 
                 disabled={gameState.isProcessing || !inputValue.trim()}
-                className={`absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-xl flex items-center justify-center transition-all ${gameState.isProcessing || !inputValue.trim() ? 'bg-stone-950 text-stone-800 opacity-20' : 'bg-stone-800 hover:bg-purple-800 text-white shadow-xl active:scale-90 hover:shadow-purple-500/20'}`}
+                className={`absolute right-4 bottom-5 w-10 h-10 rounded-xl flex items-center justify-center transition-all ${gameState.isProcessing || !inputValue.trim() ? 'bg-stone-950 text-stone-800 opacity-20' : 'bg-stone-800 hover:bg-purple-800 text-white shadow-xl active:scale-90 hover:shadow-purple-500/20'}`}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m12 19 7-7-7-7"/><path d="M19 12H5"/></svg>
               </button>
             </form>
             <div className="mt-4 text-center">
-              <p className="text-[9px] uppercase tracking-[0.6em] text-stone-700 font-bold opacity-40">Maceranı burada fısılda</p>
+              <p className="text-[10px] uppercase tracking-[0.5em] text-stone-800 font-bold opacity-60">Fısıltıların dünyayı şekillendirecek</p>
             </div>
           </div>
         </section>
